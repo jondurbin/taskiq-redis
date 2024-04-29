@@ -1,5 +1,5 @@
 from logging import getLogger
-from typing import Any, AsyncGenerator, Callable, Optional, TypeVar
+from typing import Any, AsyncGenerator, Callable, List, Optional, TypeVar
 
 from redis.asyncio import BlockingConnectionPool, ConnectionPool, Redis
 from taskiq.abc.broker import AsyncBroker

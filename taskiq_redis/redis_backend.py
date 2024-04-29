@@ -303,6 +303,7 @@ class RedisAsyncSentinelResultBackend(AsyncResultBackend[_ReturnType]):
             **connection_kwargs,
         )
         self.sentinel_id = sentinel_id
+        self._master = None
         self.keep_results = keep_results
         self.result_ex_time = result_ex_time
         self.result_px_time = result_px_time
@@ -328,6 +329,11 @@ class RedisAsyncSentinelResultBackend(AsyncResultBackend[_ReturnType]):
         await self.sentinel.disconnect()
         await super().shutdown()
 
+    async def master(self):
+        if not self._master:
+            self._master = await self.sentinel.master_for(self.sentinel_id)
+        return self._master
+
     async def set_result(
         self,
         task_id: str,
@@ -351,7 +357,7 @@ class RedisAsyncSentinelResultBackend(AsyncResultBackend[_ReturnType]):
         elif self.result_px_time:
             redis_set_params["px"] = self.result_px_time
 
-        redis = await self.sentinel.master_for(self.sentinel_id)
+        redis = await self.master()
         await redis.set(**redis_set_params)  # type: ignore
 
     async def is_result_ready(self, task_id: str) -> bool:
@@ -362,7 +368,7 @@ class RedisAsyncSentinelResultBackend(AsyncResultBackend[_ReturnType]):
 
         :returns: True if the result is ready else False.
         """
-        redis = await self.sentinel.master_for(self.sentinel_id)
+        redis = await self.master()
         return bool(await redis.exists(task_id))
 
     async def get_result(
@@ -378,7 +384,7 @@ class RedisAsyncSentinelResultBackend(AsyncResultBackend[_ReturnType]):
         :raises ResultIsMissingError: if there is no result when trying to get it.
         :return: task's return value.
         """
-        redis = await self.sentinel.master_for(self.sentinel_id)
+        redis = await self.master()
         if self.keep_results:
             result_value = await redis.get(
                 name=task_id,

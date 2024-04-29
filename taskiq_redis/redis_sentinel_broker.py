@@ -32,12 +32,17 @@ class BaseRedisSentinelBroker(AsyncBroker):
             **connection_kwargs,
         )
         self.sentinel_id = sentinel_id
-
+        self._master = None
         self.queue_name = queue_name
+
+    async def master(self):
+        if not self._master:
+            self._master = await self.sentinel.master_for(self.sentinel_id)
+        return self._master
 
     async def shutdown(self) -> None:
         """Closes redis connection pool."""
-        await self.sentinel.aclose()  # type: ignore[attr-defined]
+        await self.sentinel = None  # type: ignore[attr-defined]
         await super().shutdown()
 
 
@@ -52,7 +57,7 @@ class ListQueueSentinelBroker(BaseRedisSentinelBroker):
 
         :param message: message to append.
         """
-        redis = await self.sentinel.master_for(self.sentinel_id)
+        redis = await self.master()
         await redis.lpush(self.queue_name, message.message)  # type: ignore[attr-defined]
 
     async def listen(self) -> AsyncGenerator[bytes, None]:
@@ -66,6 +71,6 @@ class ListQueueSentinelBroker(BaseRedisSentinelBroker):
         """
         redis_brpop_data_position = 1
         while True:
-            redis = await self.sentinel.master_for(self.sentinel_id)
+            redis = await self.master()
             value = await redis.brpop([self.queue_name])  # type: ignore[attr-defined]
             yield value[redis_brpop_data_position]
