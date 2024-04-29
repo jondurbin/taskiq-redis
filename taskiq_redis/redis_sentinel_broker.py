@@ -1,4 +1,4 @@
-from typing import Any, List, Tuple, AsyncGenerator
+from typing import Any, List, AsyncGenerator
 from redis.asyncio import Sentinel, Redis
 from taskiq.abc.broker import AsyncBroker
 from taskiq.message import BrokerMessage
@@ -9,7 +9,7 @@ class BaseRedisSentinelBroker(AsyncBroker):
 
     def __init__(
         self,
-        sentinel_hosts: List[Tuple(str, int)],
+        sentinel_hosts: List[tuple(str, int)],
         sentinel_id: str = "taskiq",
         queue_name: str = "taskiq",
         max_connection_pool_size: int = 2**31,
