@@ -1,7 +1,7 @@
 import pickle
 from typing import Any, Dict, Optional, TypeVar, Union
 
-from redis.asyncio import BlockingConnectionPool, Redis
+from redis.asyncio import BlockingConnectionPool, Redis, Sentinel
 from redis.asyncio.cluster import RedisCluster
 from taskiq import AsyncResultBackend
 from taskiq.abc.result_backend import TaskiqResult
@@ -253,6 +253,138 @@ class RedisAsyncClusterResultBackend(AsyncResultBackend[_ReturnType]):
             )
         else:
             result_value = await self.redis.getdel(  # type: ignore[attr-defined]
+                name=task_id,
+            )
+
+        if result_value is None:
+            raise ResultIsMissingError
+
+        taskiq_result: TaskiqResult[_ReturnType] = pickle.loads(  # noqa: S301
+            result_value,
+        )
+
+        if not with_logs:
+            taskiq_result.log = None
+
+        return taskiq_result
+
+class RedisAsyncSentinelResultBackend(AsyncResultBackend[_ReturnType]):
+    """Async sentinel result based on redis."""
+
+    def __init__(
+        self,
+        sentinel_hosts: List[Tuple(str, int)],
+        sentinel_id: str = "taskiq",
+        keep_results: bool = True,
+        result_ex_time: Optional[int] = None,
+        result_px_time: Optional[int] = None,
+        max_connection_pool_size: Optional[int] = None,
+        **connection_kwargs: Any,
+    ) -> None:
+        """
+        Constructs a new sentinel result backend.
+
+        :param sentinel_hosts: list of tuples with (ip, port) of sentinel hosts.
+        :param sentinel_id: name of the sentinel instance.
+        :param keep_results: flag to not remove results from Redis after reading.
+        :param result_ex_time: expire time in seconds for result.
+        :param result_px_time: expire time in milliseconds for result.
+        :param max_connection_pool_size: maximum number of connections in pool.
+        :param connection_kwargs: additional arguments for redis BlockingConnectionPool.
+
+        :raises DuplicateExpireTimeSelectedError: if result_ex_time
+            and result_px_time are selected.
+        :raises ExpireTimeMustBeMoreThanZeroError: if result_ex_time
+            and result_px_time are equal zero.
+        """
+        self.sentinel: Sentinel[bytes] = Sentinel(
+            sentinel_hosts,
+            max_connections=max_connection_pool_size,
+            **connection_kwargs,
+        )
+        self.sentinel_id = sentinel_id
+        self.keep_results = keep_results
+        self.result_ex_time = result_ex_time
+        self.result_px_time = result_px_time
+
+        unavailable_conditions = any(
+            (
+                self.result_ex_time is not None and self.result_ex_time <= 0,
+                self.result_px_time is not None and self.result_px_time <= 0,
+            ),
+        )
+        if unavailable_conditions:
+            raise ExpireTimeMustBeMoreThanZeroError(
+                "You must select one expire time param and it must be more than zero.",
+            )
+
+        if self.result_ex_time and self.result_px_time:
+            raise DuplicateExpireTimeSelectedError(
+                "Choose either result_ex_time or result_px_time.",
+            )
+
+    async def shutdown(self) -> None:
+        """Closes redis connection."""
+        await self.sentinel.disconnect()
+        await super().shutdown()
+
+    async def set_result(
+        self,
+        task_id: str,
+        result: TaskiqResult[_ReturnType],
+    ) -> None:
+        """
+        Sets task result in redis.
+
+        Dumps TaskiqResult instance into the bytes and writes
+        it to redis.
+
+        :param task_id: ID of the task.
+        :param result: TaskiqResult instance.
+        """
+        redis_set_params: Dict[str, Union[str, bytes, int]] = {
+            "name": task_id,
+            "value": pickle.dumps(result),
+        }
+        if self.result_ex_time:
+            redis_set_params["ex"] = self.result_ex_time
+        elif self.result_px_time:
+            redis_set_params["px"] = self.result_px_time
+
+        redis = await self.sentinel.master_for(self.sentinel_id)
+        await redis.set(**redis_set_params)  # type: ignore
+
+    async def is_result_ready(self, task_id: str) -> bool:
+        """
+        Returns whether the result is ready.
+
+        :param task_id: ID of the task.
+
+        :returns: True if the result is ready else False.
+        """
+        redis = await self.sentinel.master_for(self.sentinel_id)
+        return bool(await redis.exists(task_id))
+
+    async def get_result(
+        self,
+        task_id: str,
+        with_logs: bool = False,
+    ) -> TaskiqResult[_ReturnType]:
+        """
+        Gets result from the task.
+
+        :param task_id: task's id.
+        :param with_logs: if True it will download task's logs.
+        :raises ResultIsMissingError: if there is no result when trying to get it.
+        :return: task's return value.
+        """
+        redis = await self.sentinel.master_for(self.sentinel_id)
+        if self.keep_results:
+            result_value = await redis.get(
+                name=task_id,
+            )
+        else:
+            result_value = await redis.getdel(
                 name=task_id,
             )
 

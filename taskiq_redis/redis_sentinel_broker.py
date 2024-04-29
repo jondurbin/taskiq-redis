@@ -19,6 +19,7 @@ class BaseRedisSentinelBroker(AsyncBroker):
         Constructs a new broker.
 
         :param sentinel_hosts: list of tuples with (ip, port) of sentinel hosts.
+        :param sentinel_id: name of the sentinel instance.
         :param queue_name: name for a list in redis.
         :param max_connection_pool_size: maximum number of connections in pool.
         :param connection_kwargs: additional arguments for aio-redis ConnectionPool.
