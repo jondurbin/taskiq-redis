@@ -42,7 +42,8 @@ class BaseRedisSentinelBroker(AsyncBroker):
 
     async def shutdown(self) -> None:
         """Closes redis connection pool."""
-        await self.sentinel = None  # type: ignore[attr-defined]
+        self._master = None
+        self.sentinel = None  # type: ignore[attr-defined]
         await super().shutdown()
 
 

@@ -326,7 +326,8 @@ class RedisAsyncSentinelResultBackend(AsyncResultBackend[_ReturnType]):
 
     async def shutdown(self) -> None:
         """Closes redis connection."""
-        await self.sentinel.disconnect()
+        self.sentinel = None
+        self._master = None
         await super().shutdown()
 
     async def master(self):
