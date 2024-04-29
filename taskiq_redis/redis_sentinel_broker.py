@@ -37,7 +37,7 @@ class BaseRedisSentinelBroker(AsyncBroker):
 
     async def shutdown(self) -> None:
         """Closes redis connection pool."""
-        await self.redis.aclose()  # type: ignore[attr-defined]
+        await self.sentinel.aclose()  # type: ignore[attr-defined]
         await super().shutdown()
 
 
@@ -53,7 +53,7 @@ class ListQueueSentinelBroker(BaseRedisSentinelBroker):
         :param message: message to append.
         """
         redis = await self.sentinel.master_for(self.sentinel_id)
-        await self.redis.lpush(self.queue_name, message.message)  # type: ignore[attr-defined]
+        await redis.lpush(self.queue_name, message.message)  # type: ignore[attr-defined]
 
     async def listen(self) -> AsyncGenerator[bytes, None]:
         """
