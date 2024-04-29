@@ -273,7 +273,7 @@ class RedisAsyncSentinelResultBackend(AsyncResultBackend[_ReturnType]):
 
     def __init__(
         self,
-        sentinel_hosts: List[tuple(str, int)],
+        sentinel_hosts: List[Any],
         sentinel_id: str = "taskiq",
         keep_results: bool = True,
         result_ex_time: Optional[int] = None,

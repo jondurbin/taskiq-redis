@@ -9,7 +9,7 @@ class BaseRedisSentinelBroker(AsyncBroker):
 
     def __init__(
         self,
-        sentinel_hosts: List[tuple(str, int)],
+        sentinel_hosts: List[Any],
         sentinel_id: str = "taskiq",
         queue_name: str = "taskiq",
         max_connection_pool_size: int = 2**31,
