@@ -1,5 +1,5 @@
 import pickle
-from typing import Any, Dict, Optional, TypeVar, Union
+from typing import Any, Dict, List, Optional, TypeVar, Union
 
 from redis.asyncio import BlockingConnectionPool, Redis, Sentinel
 from redis.asyncio.cluster import RedisCluster
